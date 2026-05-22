@@ -769,8 +769,9 @@ def manager_help(message):
         "• /users — список всех пользователей\n"
         "• /active — активные диалоги\n"
         "• /reply ID текст — ответить конкретному пользователю\n"
-        "• /end ID — завершить диалог с пользователем\n\n"
-        "• /mailing Текст — СДЕЛАТЬ РАССЫЛКУ ВСЕМ ПОЛЬЗОВАТЕЛЯМ\n\n" 
+        "• /end ID — завершить диалог с пользователем\n"
+        "• /mailing Текст — СДЕЛАТЬ РАССЫЛКУ ВСЕМ ПОЛЬЗОВАТЕЛЯМ\n" 
+        "• /mailing_photo Текст с фото — СДЕЛАТЬ РАССЫЛКУ ВСЕМ ПОЛЬЗОВАТЕЛЯМ\n\n" 
         "📌 Кнопки:\n"
         "• «📋 Активные чаты» — список текущих диалогов\n"
         "• «📊 Статистика» — общая информация"
@@ -879,7 +880,7 @@ def manager_reply(message):
 def get_id(message):
     bot.send_message(message.chat.id, f"Ваш ID: {message.chat.id}")
     
-# РАССЫЛКА ВСЕМ ПОЛЬЗОВАТЕЛЯМ
+# РАССЫЛКА ВСЕМ ПОЛЬЗОВАТЕЛЯМ (ТЕКСТ)
 @bot.message_handler(commands=['mailing'])
 def mailing(message):
     # Только менеджер может делать рассылку
@@ -933,31 +934,73 @@ def mailing(message):
         f"❌ Ошибок: {fail}"
     )
 
-    @bot.message_handler(commands=['mailing_photo'])
-    def mailing_photo(message):
-        if message.chat.id not in MANAGER_IDS:
-            return
 
-        if not message.reply_to_message or not message.reply_to_message.photo:
-            bot.send_message(
-                message.chat.id,
-                "❌ Ответьте на сообщение с фото, которое хотите отправить всем!"
+# РАССЫЛКА С ФОТО
+@bot.message_handler(commands=['mailing_photo'])
+def mailing_photo(message):
+    # Только менеджер может делать рассылку
+    if message.chat.id not in MANAGER_IDS:
+        return
+
+    # Проверяем, что менеджер ответил на фото
+    if not message.reply_to_message or not message.reply_to_message.photo:
+        bot.send_message(
+            message.chat.id,
+            "❌ Как сделать рассылку с фото:\n\n"
+            "1. Отправьте фото боту\n"
+            "2. Нажмите «Ответить» на это фото\n"
+            "3. Напишите команду: /mailing_photo Текст акции\n\n"
+            "Пример: /mailing_photo Скидка 50% на все кроссовки!"
+        )
+        return
+
+    # Получаем фото
+    photo = message.reply_to_message.photo[-1].file_id
+
+    # Получаем текст (всё, что после команды)
+    caption = message.text.replace('/mailing_photo', '').strip()
+
+    if not caption:
+        caption = "🔥 Акция в нашем магазине! 🔥"
+
+    # Загружаем всех пользователей
+    users = load_users()
+
+    if not users:
+        bot.send_message(message.chat.id, "📭 Нет пользователей для рассылки.")
+        return
+
+    # Отправляем рассылку
+    success = 0
+    fail = 0
+
+    bot.send_message(
+        message.chat.id,
+        f"📨 Начинаю рассылку с фото {len(users)} пользователям..."
+    )
+
+    for user_id in users:
+        try:
+            bot.send_photo(
+                int(user_id),
+                photo,
+                caption=f"📢 *Акция!* 📢\n\n{caption}",
+                parse_mode='Markdown'
             )
-            return
+            success += 1
+        except Exception as e:
+            fail += 1
+            print(f"Не удалось отправить {user_id}: {e}")
 
-        photo = message.reply_to_message.photo[-1].file_id
-        caption = message.text.replace('/mailing_photo', '').strip()
+        # Небольшая задержка
+        time.sleep(0.05)
 
-        users = load_users()
-
-        for user_id in users:
-            try:
-                bot.send_photo(int(user_id), photo, caption=caption)
-            except:
-                pass
-
-        bot.send_message(message.chat.id, f"✅ Рассылка фото завершена!")
-
+    bot.send_message(
+        message.chat.id,
+        f"✅ Рассылка с фото завершена!\n\n"
+        f"📨 Отправлено: {success}\n"
+        f"❌ Ошибок: {fail}"
+    )
 # Веб-сервер для Render (заглушка)
 app = Flask(__name__)
 
