@@ -6,6 +6,8 @@ import threading
 import requests
 import time
 import random
+import datetime
+from flask import Flask
 
 TOKEN = '8736300910:AAEeVFzPEUlwuvY67irIGZUCy96pT94QVa4'
 MANAGER_IDS = [545304840]  # Список ID менеджеров (можно добавить нескольких)
@@ -876,14 +878,30 @@ def manager_reply(message):
 def get_id(message):
     bot.send_message(message.chat.id, f"Ваш ID: {message.chat.id}")
 
+# Веб-сервер для Render (заглушка)
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "Бот работает!"
+
+def run_web_server():
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
 
 # -------------------------------------------------------------------
 # ЗАПУСК БОТА
 # -------------------------------------------------------------------
 if __name__ == '__main__':
+    # Запускаем веб-сервер в отдельном потоке
+    threading.Thread(target=run_web_server, daemon=True).start()
+    
+    # Запускаем пинг
     threading.Thread(target=keep_alive, daemon=True).start()
+    
     print('Бот поддержки Street Beat запущен! 🚀')
     print(f'Менеджеры: {MANAGER_IDS}')
     print('Сайт магазина: https://street-beat.ru')
-    print('Пинг запущен (каждые 10 минут)')
+    print('Веб-сервер запущен для Render')
+    
     bot.infinity_polling(timeout=60)
