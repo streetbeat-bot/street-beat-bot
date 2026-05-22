@@ -770,6 +770,7 @@ def manager_help(message):
         "• /active — активные диалоги\n"
         "• /reply ID текст — ответить конкретному пользователю\n"
         "• /end ID — завершить диалог с пользователем\n\n"
+        "• /mailing Текст — СДЕЛАТЬ РАССЫЛКУ ВСЕМ ПОЛЬЗОВАТЕЛЯМ\n\n" 
         "📌 Кнопки:\n"
         "• «📋 Активные чаты» — список текущих диалогов\n"
         "• «📊 Статистика» — общая информация"
@@ -877,6 +878,85 @@ def manager_reply(message):
 @bot.message_handler(commands=['getid'])
 def get_id(message):
     bot.send_message(message.chat.id, f"Ваш ID: {message.chat.id}")
+    
+# РАССЫЛКА ВСЕМ ПОЛЬЗОВАТЕЛЯМ
+@bot.message_handler(commands=['mailing'])
+def mailing(message):
+    # Только менеджер может делать рассылку
+    if message.chat.id not in MANAGER_IDS:
+        return
+
+    # Получаем текст рассылки (всё, что после команды)
+    text = message.text.replace('/mailing', '').strip()
+
+    if not text:
+        bot.send_message(
+            message.chat.id,
+            "❌ Чтобы сделать рассылку, напишите:\n"
+            "/mailing Текст вашего сообщения\n\n"
+            "Пример: /mailing У нас скидка 20% на все кроссовки!"
+        )
+        return
+
+    # Загружаем всех пользователей
+    users = load_users()
+
+    if not users:
+        bot.send_message(message.chat.id, "📭 Нет пользователей для рассылки.")
+        return
+
+    # Отправляем рассылку
+    success = 0
+    fail = 0
+
+    bot.send_message(
+        message.chat.id,
+        f"📨 Начинаю рассылку {len(users)} пользователям...\n"
+        f"Сообщение: {text[:50]}..."
+    )
+
+    for user_id in users:
+        try:
+            bot.send_message(int(user_id), f"📢 *Акция!* 📢\n\n{text}", parse_mode='Markdown')
+            success += 1
+        except Exception as e:
+            fail += 1
+            print(f"Не удалось отправить {user_id}: {e}")
+
+        # Небольшая задержка, чтобы Telegram не заблокировал
+        time.sleep(0.05)
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ Рассылка завершена!\n\n"
+        f"📨 Отправлено: {success}\n"
+        f"❌ Ошибок: {fail}"
+    )
+
+    @bot.message_handler(commands=['mailing_photo'])
+    def mailing_photo(message):
+        if message.chat.id not in MANAGER_IDS:
+            return
+
+        if not message.reply_to_message or not message.reply_to_message.photo:
+            bot.send_message(
+                message.chat.id,
+                "❌ Ответьте на сообщение с фото, которое хотите отправить всем!"
+            )
+            return
+
+        photo = message.reply_to_message.photo[-1].file_id
+        caption = message.text.replace('/mailing_photo', '').strip()
+
+        users = load_users()
+
+        for user_id in users:
+            try:
+                bot.send_photo(int(user_id), photo, caption=caption)
+            except:
+                pass
+
+        bot.send_message(message.chat.id, f"✅ Рассылка фото завершена!")
 
 # Веб-сервер для Render (заглушка)
 app = Flask(__name__)
