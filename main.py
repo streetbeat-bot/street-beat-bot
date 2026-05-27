@@ -221,6 +221,7 @@ SIZE_TABLES = {
 user_brand_choice = {}
 
 
+
 def brands_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=3)
     buttons = []
@@ -239,6 +240,149 @@ def gender_keyboard():
     )
     markup.add(types.InlineKeyboardButton("◀️ Назад к брендам", callback_data="back_to_brands"))
     return markup
+
+
+@bot.message_handler(func=lambda message: message.text == "📏 Таблица размеров" and message.chat.id not in MANAGER_IDS)
+def size_table_start(message):
+    bot.send_message(
+        message.chat.id,
+        "📏 *Таблица размеров кроссовок*\n\nВыберите бренд:",
+        parse_mode='Markdown',
+        reply_markup=brands_keyboard()
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('brand_'))
+def brand_selected(call):
+    brand = call.data.replace('brand_', '')
+    user_brand_choice[call.message.chat.id] = brand
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+    bot.send_message(
+        call.message.chat.id,
+        f"📏 *Таблица размеров {brand}*\n\nВыберите пол:",
+        parse_mode='Markdown',
+        reply_markup=gender_keyboard()
+    )
+    bot.answer_callback_query(call.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('gender_'))
+def gender_selected(call):
+    gender = call.data.replace('gender_', '')
+    user_id = call.message.chat.id
+    brand = user_brand_choice.get(user_id)
+
+    if not brand:
+        bot.send_message(
+            user_id,
+            "❌ Что-то пошло не так. Пожалуйста, начните заново с кнопки «📏 Таблица размеров»"
+        )
+        bot.answer_callback_query(call.id)
+        return
+
+    size_id = SIZE_TABLES.get(brand, {}).get(gender)
+    gender_text = "мужской" if gender == "male" else "женский"
+
+    # Удаляем предыдущее сообщение с кнопками
+    bot.edit_message_reply_markup(user_id, call.message.message_id, reply_markup=None)
+
+    if size_id and size_id != "ВАШ_FILE_ID_ДЛЯ_...":
+        try:
+            bot.send_photo(
+                user_id,
+                size_id,
+                caption=f"📏 *Таблица размеров {brand} ({gender_text})*\n\n"
+                        f"Как определить свой размер:\n"
+                        f"1️⃣ Измерьте длину стопы в см\n"
+                        f"2️⃣ Найдите соответствующее значение в таблице\n"
+                        f"3️⃣ При заказе ориентируйтесь на этот размер",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            bot.send_message(
+                user_id,
+                f"📏 *Таблица размеров {brand} ({gender_text})*\n\n"
+                f"К сожалению, изображение временно недоступно.\n"
+                f"Пожалуйста, напишите нам в поддержку, и мы поможем подобрать размер! 😊",
+                parse_mode='Markdown'
+            )
+    else:
+        bot.send_message(
+            user_id,
+            f"❌ Таблица размеров для бренда {brand} временно недоступна.\n"
+            f"Пожалуйста, напишите в поддержку, и мы поможем! 😊"
+        )
+
+    # Очищаем сохранённый бренд
+    if user_id in user_brand_choice:
+        del user_brand_choice[user_id]
+
+    # Кнопки после отправки таблицы
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("◀️ Назад к выбору бренда", callback_data="back_to_brands_from_table"))
+    markup.add(types.InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_menu"))
+
+    bot.send_message(
+        user_id,
+        "📏 *Выберите дальнейшее действие:*",
+        parse_mode='Markdown',
+        reply_markup=markup
+    )
+
+    bot.answer_callback_query(call.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_brands")
+def back_to_brands(call):
+    user_id = call.message.chat.id
+    if user_id in user_brand_choice:
+        del user_brand_choice[user_id]
+    bot.edit_message_reply_markup(user_id, call.message.message_id, reply_markup=None)
+    bot.send_message(
+        user_id,
+        "📏 *Таблица размеров кроссовок*\n\nВыберите бренд:",
+        parse_mode='Markdown',
+        reply_markup=brands_keyboard()
+    )
+    bot.answer_callback_query(call.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_brands_from_table")
+def back_to_brands_from_table(call):
+    user_id = call.message.chat.id
+
+    # Удаляем сообщение с кнопками
+    bot.delete_message(user_id, call.message.message_id)
+
+    # Отправляем заново выбор бренда
+    bot.send_message(
+        user_id,
+        "📏 *Таблица размеров кроссовок*\n\nВыберите бренд:",
+        parse_mode='Markdown',
+        reply_markup=brands_keyboard()
+    )
+
+    bot.answer_callback_query(call.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_menu")
+def back_to_menu(call):
+    user_id = call.message.chat.id
+    if user_id in user_brand_choice:
+        del user_brand_choice[user_id]
+
+    # Удаляем текущее сообщение
+    try:
+        bot.delete_message(user_id, call.message.message_id)
+    except:
+        pass
+
+    bot.send_message(
+        user_id,
+        "👟 Возвращаем вас в главное меню!\nЧем могу помочь ещё? 😊",
+        reply_markup=user_keyboard()
+    )
+    bot.answer_callback_query(call.id)
 
 
 # -------------------------------------------------------------------
